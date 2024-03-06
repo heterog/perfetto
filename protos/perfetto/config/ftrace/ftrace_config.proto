@@ -18,10 +18,11 @@ syntax = "proto2";
 
 package perfetto.protos;
 
-// Next id: 28
+// Next id: 29
 message FtraceConfig {
   // Ftrace events to record, example: "sched/sched_switch".
   repeated string ftrace_events = 1;
+  repeated string fstacktrace_events = 28;  // todo: reorder the id?
   // Android-specific event categories:
   repeated string atrace_categories = 2;
   repeated string atrace_apps = 3;

@@ -127,7 +127,7 @@ std::set<GroupAndName> FtraceConfigMuxer::GetFtraceEvents(
     const FtraceConfig& request,
     const ProtoTranslationTable* table) {
   std::set<GroupAndName> events;
-  for (const auto& config_value : request.ftrace_events()) {
+  auto&& append_event = [&](const std::string& config_value) {
     std::string group;
     std::string name;
     std::tie(group, name) = EventToStringGroupAndName(config_value);
@@ -143,13 +143,21 @@ std::set<GroupAndName> FtraceConfigMuxer::GetFtraceEvents(
             "Event doesn't exist: %s. Include the group in the config to allow "
             "the event to be output as a generic event.",
             name.c_str());
-        continue;
+        return;
       }
       events.insert(GroupAndName(e->group, e->name));
     } else {
       events.insert(GroupAndName(group, name));
     }
+  };
+
+  for (const auto& config_value : request.ftrace_events()) {
+    append_event(config_value);
   }
+  for (const auto& config_value : request.fstacktrace_events()) {
+    append_event(config_value);
+  }
+
   if (RequiresAtrace(request)) {
     InsertEvent("ftrace", "print", &events);
 
@@ -690,6 +698,12 @@ bool FtraceConfigMuxer::SetupConfig(FtraceConfigId id,
       if (errors)
         errors->failed_ftrace_events.push_back(group_and_name.ToString());
     }
+  }
+
+  // Enable the stacktrace trigger for some events, TODO: performance?
+  for (const auto& group_and_name : request.fstacktrace_events()) {
+    const Event* event = table_->GetOrCreateEvent(group_and_name);
+    if (filter.IsEventEnabled())
   }
 
   EventFilter syscall_filter = BuildSyscallFilter(filter, request);
