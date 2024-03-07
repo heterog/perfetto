@@ -362,6 +362,7 @@ void CpuReader::Bundler::FinalizeAndRunSymbolizer() {
         // function (which we expect to be symbolized), the other (|work|) is
         // a pointer to a heap struct, which is unsymbolizable, even when
         // using the textual ftrace endpoint.
+        PERFETTO_DLOG("Could not found sym_name of %lu", kaddr.addr);
         continue;
       }
 
@@ -394,6 +395,7 @@ void CpuReader::Bundler::FinalizeAndRunSymbolizer() {
       metadata_->last_kernel_addr_index_written = max_it_at_end;
     }
   }
+  // seems `packet_->Finalize()` unnecessary, why?
   packet_ = TraceWriter::TracePacketHandle(nullptr);
 }
 
@@ -695,8 +697,13 @@ bool CpuReader::ParseEvent(uint16_t ftrace_event_id,
 
   // The event must be enabled and known to reach here.
   const Event& info = *table->GetEventById(ftrace_event_id);
+  const bool is_kernelstack_event =
+      (info.proto_field_id ==
+      protos::pbzero::FtraceEvent::kKernelStackFieldNumber);
 
-  if (info.size > static_cast<size_t>(end - start)) {
+  // The kernel_stack event's size is depending on the size field, which will
+  // decode and check it later.
+  if (!is_kernelstack_event && info.size > static_cast<size_t>(end - start)) {
     PERFETTO_DLOG("Expected event length is beyond end of buffer.");
     return false;
   }
@@ -729,6 +736,8 @@ bool CpuReader::ParseEvent(uint16_t ftrace_event_id,
                  info.proto_field_id ==
                  protos::pbzero::FtraceEvent::kSysExitFieldNumber)) {
     success &= ParseSysExit(info, start, end, ds_config, nested, metadata);
+  } else if (PERFETTO_UNLIKELY(is_kernelstack_event)) {
+    success &= ParseKernelStack(info, start, end, nested, metadata);
   } else {  // Parse all other events.
     for (const Field& field : info.fields) {
       success &= ParseField(field, start, end, table, nested, metadata);
@@ -849,6 +858,8 @@ bool CpuReader::ParseField(const Field& field,
     case kFtraceSymAddr64ToUint64:
       ReadSymbolAddr<uint64_t>(field_start, field_id, message, metadata);
       return true;
+    case kFtraceStacktraceToSpecial:
+      // Handled in `ParseKernelStack`, thus nop here, satisfy the compiler
     case kInvalidTranslationStrategy:
       break;
   }
@@ -944,6 +955,46 @@ bool CpuReader::ParseSysExit(const Event& info,
     const auto pid = metadata->last_seen_common_pid;
     const auto syscall_ret_u = static_cast<uint64_t>(syscall_ret);
     metadata->fds.insert(std::make_pair(pid, syscall_ret_u));
+  }
+  return true;
+}
+
+bool CpuReader::ParseKernelStack(const perfetto::Event& info,
+                                const uint8_t* start,
+                                const uint8_t* end,
+                                protozero::Message* message,
+                                perfetto::FtraceMetadata* metadata) {
+  const auto& size_field = info.fields[0];
+  const auto& caller_field = info.fields[1];
+
+  const uint8_t* size_field_start = start + size_field.ftrace_offset;
+  if (size_field_start + size_field.ftrace_size > end) {
+    PERFETTO_DLOG("Stacktrace size overflowed");
+    return false;
+  }
+
+  int64_t size = ReadSignedFtraceValue(
+      start + size_field.ftrace_offset, size_field.ftrace_type);
+  message->AppendVarInt(size_field.proto_field_id, size);
+
+  // The `size` read from ftrace `format` isn't correct for a flex array,
+  // thus we need to "correct" it. TODO: where to place me?
+  const uint8_t* caller_field_start = start + caller_field.ftrace_offset;
+  constexpr uint16_t caller_field_size = sizeof(uint64_t);
+  if (caller_field_start + caller_field_size * size > end) {
+    const int64_t actual = (end - caller_field_start) / caller_field_size;
+    PERFETTO_DLOG("Stacktrace caller size overflowed, %ld != %ld",
+                  size, actual);
+    return false;
+  }
+
+  // `message` here is a nested protobuf, shall match the `ftrace.proto` def
+  for (int64_t i = 0; i < size; ++i) {
+    ReadSymbolAddr<uint64_t>(
+        caller_field_start + i * caller_field_size,
+        caller_field.proto_field_id,
+        message,
+        metadata);
   }
   return true;
 }

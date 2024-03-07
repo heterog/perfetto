@@ -108,6 +108,9 @@ bool SetTranslationStrategy(FtraceFieldType ftrace,
     *out = kDataLocToString;
   } else if (ftrace == kFtraceSymAddr64 && proto == ProtoSchemaType::kUint64) {
     *out = kFtraceSymAddr64ToUint64;
+  } else if (ftrace == kFtraceSymAddr64Ptr && proto == ProtoSchemaType::kUint64) {
+    // kernel_stack::caller, for satisfying the verifier, @see ParseKernelStack
+    *out = kFtraceStacktraceToSpecial;
   } else {
     PERFETTO_DLOG("No translation strategy for '%s' -> '%s'", ToString(ftrace),
                   ProtoSchemaToString(proto));

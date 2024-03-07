@@ -27,6 +27,7 @@
 #include "src/trace_processor/importers/common/system_info_tracker.h"
 #include "src/trace_processor/importers/common/thread_state_tracker.h"
 #include "src/trace_processor/importers/ftrace/ftrace_descriptors.h"
+#include "src/trace_processor/importers/ftrace/ftrace_module.h"
 #include "src/trace_processor/storage/stats.h"
 #include "src/trace_processor/types/task_state.h"
 #include "src/trace_processor/types/trace_processor_context.h"
@@ -235,6 +236,7 @@ void FtraceSchedEventTracker::PushSchedWakingCompact(uint32_t cpu,
 
     // Add an entry to the raw table.
     RawId id = context_->storage->mutable_ftrace_event_table()->Insert(row).id;
+    context_->ftrace_module->SetLastFtraceEventId(cpu, id.value);
 
     using SW = protos::pbzero::SchedWakingFtraceEvent;
     auto inserter = context_->args_tracker->AddArgsTo(id);
@@ -271,6 +273,7 @@ void FtraceSchedEventTracker::AddRawSchedSwitchEvent(uint32_t cpu,
     RawId id = context_->storage->mutable_ftrace_event_table()
                    ->Insert({ts, sched_switch_id_, cpu, prev_utid})
                    .id;
+    context_->ftrace_module->SetLastFtraceEventId(cpu, id.value);
 
     // Note: this ordering is important. The events should be pushed in the same
     // order as the order of fields in the proto; this is used by the raw table

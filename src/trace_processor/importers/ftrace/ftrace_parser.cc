@@ -28,6 +28,7 @@
 #include "src/trace_processor/importers/common/process_tracker.h"
 #include "src/trace_processor/importers/common/thread_state_tracker.h"
 #include "src/trace_processor/importers/common/track_tracker.h"
+#include "src/trace_processor/importers/ftrace/ftrace_module.h"
 #include "src/trace_processor/importers/ftrace/binder_tracker.h"
 #include "src/trace_processor/importers/ftrace/v4l2_tracker.h"
 #include "src/trace_processor/importers/ftrace/virtio_video_tracker.h"
@@ -342,6 +343,7 @@ FtraceParser::FtraceParser(TraceProcessorContext* context)
       runtime_status_suspending_id_(
           context->storage->InternString("Suspending")),
       runtime_status_resuming_id_(context->storage->InternString("Resuming")) {
+      ftrace_kernel_stack_caller_id(context_->storage->InternString("caller")) {
   // Build the lookup table for the strings inside ftrace events (e.g. the
   // name of ftrace event fields and the names of their args).
   for (size_t i = 0; i < GetDescriptorsSize(); i++) {
@@ -636,6 +638,10 @@ base::Status FtraceParser::ParseFtraceEvent(uint32_t cpu,
     ConstBytes fld_bytes = fld.as_bytes();
     if (fld.id() == FtraceEvent::kGenericFieldNumber) {
       ParseGenericFtrace(ts, cpu, pid, fld_bytes);
+    } else if (fld.id() == FtraceEvent::kKernelStackFieldNumber) {
+      // Try to merge the kernel_stack into the real event (must be the previous
+      // ftrace event that on the same CPU).
+      ParseKernelStack(ts, cpu, pid, fld_bytes, seq_state);
     } else if (fld.id() != FtraceEvent::kSchedSwitchFieldNumber) {
       // sched_switch parsing populates the raw table by itself
       ParseTypedFtraceToRaw(fld.id(), ts, cpu, pid, fld_bytes, seq_state);
@@ -1207,6 +1213,7 @@ void FtraceParser::ParseGenericFtrace(int64_t ts,
   RawId id = context_->storage->mutable_ftrace_event_table()
                  ->Insert({ts, event_id, cpu, utid})
                  .id;
+  context_->ftrace_module->SetLastFtraceEventId(cpu, id.value);
   auto inserter = context_->args_tracker->AddArgsTo(id);
 
   for (auto it = evt.field(); it; ++it) {
@@ -1249,6 +1256,7 @@ void FtraceParser::ParseTypedFtraceToRaw(
       context_->storage->mutable_ftrace_event_table()
           ->Insert({timestamp, message_strings.message_name_id, cpu, utid})
           .id;
+  context_->ftrace_module->SetLastFtraceEventId(cpu, id.value);
   auto inserter = context_->args_tracker->AddArgsTo(id);
 
   for (auto fld = decoder.ReadField(); fld.valid(); fld = decoder.ReadField()) {
@@ -1335,6 +1343,83 @@ void FtraceParser::ParseTypedFtraceToRaw(
                       ProtoSchemaToString(type));
         break;
     }
+  }
+}
+
+void FtraceParser::ParseKernelStack(int64_t timestamp,
+                                    uint32_t cpu,
+                                    uint32_t tid,
+                                    protozero::ConstBytes blob,
+                                    PacketSequenceStateGeneration* seq_state) {
+#if 0
+  // FIXME: incomplete... want to merge with existing events, but too much
+  // hard-coded field in `to_ftrace.cc`.
+  // And the inserter here will overwrite the existed arguments, lost data.
+
+  const auto opt_id = context_->ftrace_module->GetLastFtraceEventId(cpu);
+  if (!opt_id.has_value()) {
+    // TODO: Still has lots of the missing events :/ wondering why
+    PERFETTO_DLOG("Last event missing? cpu %u tid %u", cpu, tid);
+    return;
+  }
+
+  const RawId id{opt_id.value()};
+  auto row = context_->storage->mutable_ftrace_event_table()
+                 ->FindById(id);
+  auto utid = context_->process_tracker->GetThreadOrNull(tid);
+  if (!row.has_value() || !utid.has_value()) {
+    PERFETTO_DLOG("Invalid ftrace event id %u", id.value);
+    return;
+  }
+  if (row->cpu() != cpu || row->utid() != utid) {
+    PERFETTO_DLOG("Mismatch ftrace event id %u, %u ?= %u, %u ?= %u",
+                  id.value, row->cpu(), cpu, row->utid(), utid.value());
+    (void) timestamp; /* TODO: compare the timestamp, should be in a range */
+    return;
+  }
+#endif
+
+  // found it, add the stack info to the args; TODO: other structure?
+  protos::pbzero::KernelStackFtraceEvent::Decoder evt(blob.data, blob.size);
+  std::string symbolized_stack;
+  for (auto fp = evt.caller(); fp; ++fp) {
+    const auto idx = fp->as_uint32();
+    auto* sym = seq_state->LookupInternedMessage<
+        protos::pbzero::InternedData::kKernelSymbolsFieldNumber,
+        protos::pbzero::InternedString>(idx);
+
+    if (sym) {
+      // TODO: performance optimize...
+      symbolized_stack.append(sym->str().ToStdStringView());
+      symbolized_stack.push_back('\n');
+    }
+    else {
+      PERFETTO_DLOG("Cannot find symbol of index %u", idx);
+    }
+  }
+
+  if (!symbolized_stack.empty()) {
+#if 0
+    StringId str_id = context_->storage->InternString(
+        base::StringView(symbolized_stack));
+    auto inserter = context_->args_tracker->AddArgsTo(id);
+    inserter.AddArg(ftrace_stacktrace_id_, Variadic::String(str_id));
+  }
+#else
+    using protos::pbzero::FtraceEvent;
+    StringId msg_id =
+        ftrace_message_strings_[FtraceEvent::kKernelStackFieldNumber]
+        .message_name_id;
+    UniqueTid utid = context_->process_tracker->GetOrCreateThread(tid);
+    RawId id = context_->storage->mutable_ftrace_event_table()
+                   ->Insert({timestamp, msg_id, cpu, utid})
+                   .id;
+    StringId str_id = context_->storage->InternString(
+        base::StringView(symbolized_stack));
+
+    auto inserter = context_->args_tracker->AddArgsTo(id);
+    inserter.AddArg(ftrace_kernel_stack_caller_id, Variadic::String(str_id));
+#endif
   }
 }
 

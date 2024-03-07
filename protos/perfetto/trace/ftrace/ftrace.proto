@@ -20,3 +20,7 @@ message FuncgraphExitFtraceEvent {
   optional uint64 overrun = 4;
   optional uint64 rettime = 5;
 }
+message KernelStackFtraceEvent {
+  optional int32 size = 1;
+  repeated uint64 caller = 2;
+}

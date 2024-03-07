@@ -588,10 +588,12 @@ def InstallNodeModules(force_clean=False):
   # PATH.
   env = os.environ.copy()
   env['PATH'] = TOOLS_DIR + ':' + env['PATH']
+  env['PUPPETEER_DOWNLOAD_BASE_URL'] = "https://cdn.npmmirror.com/binaries/chrome-for-testing"
 
   subprocess.check_call([
     os.path.join(TOOLS_DIR, 'pnpm'),
     'install',
+    '--registry', 'https://registry.npmmirror.com',
     '--shamefully-hoist',
     '--frozen-lockfile'],
     cwd=UI_DIR,

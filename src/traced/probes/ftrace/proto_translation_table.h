@@ -49,7 +49,11 @@ class FtraceEventBundle;
 class GroupAndName {
  public:
   GroupAndName(const std::string& group, const std::string& name)
-      : group_(group), name_(name) {}
+      : group_(group), name_(name), stacktrace_(false) {}
+
+  GroupAndName(const std::string& group, const std::string& name,
+               bool stacktrace)
+      : group_(group), name_(name), stacktrace_(stacktrace) {}
 
   bool operator==(const GroupAndName& other) const {
     return std::tie(group_, name_) == std::tie(other.group(), other.name());
@@ -61,12 +65,18 @@ class GroupAndName {
 
   const std::string& name() const { return name_; }
   const std::string& group() const { return group_; }
+  bool stacktrace() const { return stacktrace_; }
 
   std::string ToString() const { return group_ + "/" + name_; }
 
  private:
   std::string group_;
   std::string name_;
+
+  // FIXME: the GroupAndName shouldn't have other fields :/
+  // But modifying this structure would be some huge task, only consider
+  // when pull-request :!
+  bool stacktrace_;
 };
 
 inline void PrintTo(const GroupAndName& event, ::std::ostream* os) {

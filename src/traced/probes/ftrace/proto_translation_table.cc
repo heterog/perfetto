@@ -240,6 +240,7 @@ void SetProtoType(FtraceFieldType ftrace_type,
     case kFtraceInode32:
     case kFtraceInode64:
     case kFtraceSymAddr64:
+    case kFtraceSymAddr64Ptr:
       *proto_type = ProtoSchemaType::kUint64;
       *proto_field_id = GenericFtraceEvent::Field::kUintValueFieldNumber;
       break;
@@ -299,6 +300,13 @@ bool InferFtraceType(const std::string& type_and_name,
       *out = kFtraceUint64;
       return true;
     }
+  }
+
+  // Parsing of kernel_stack field as special size as string ptr, the *out is
+  // currently useless :/
+  if (type_and_name == "unsigned long caller[8]") {
+    *out = kFtraceSymAddr64Ptr;
+    return true;
   }
 
   if (Contains(type_and_name, "char[] ")) {

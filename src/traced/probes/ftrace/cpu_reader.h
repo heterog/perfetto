@@ -341,6 +341,13 @@ class CpuReader {
                            protozero::Message* message,
                            FtraceMetadata* metadata);
 
+  // Parse a stacktrace trigger into the message
+  static bool ParseKernelStack(const perfetto::Event& info,
+                               const uint8_t* start,
+                               const uint8_t* end,
+                               protozero::Message* message,
+                               perfetto::FtraceMetadata* metadata);
+
   // Parse a sched_switch event according to pre-validated format, and buffer
   // the individual fields in the given compact encoding batch.
   static void ParseSchedSwitchCompact(const uint8_t* start,

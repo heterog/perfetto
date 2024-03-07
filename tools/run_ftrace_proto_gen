@@ -4,6 +4,8 @@
 # in src/traced/probes/ftrace/test/data/*/events/.
 # Only the events in the event_list are translated.
 
+set -e
+
 DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
 if [ "$BUILDDIR" == "" ]; then
   BUILDDIR="$DIR/../out/ftrace_proto_gen_build"
@@ -29,3 +31,6 @@ cd "$DIR/.."
   --update_build_files \
   "$@" \
   "$DIR"/../src/traced/probes/ftrace/test/data/*/events/
+
+clang-format -i src/traced/probes/ftrace/event_info.cc \
+	src/trace_processor/importers/ftrace/ftrace_descriptors.cc

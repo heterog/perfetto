@@ -127,7 +127,7 @@ std::set<GroupAndName> FtraceConfigMuxer::GetFtraceEvents(
     const FtraceConfig& request,
     const ProtoTranslationTable* table) {
   std::set<GroupAndName> events;
-  for (const auto& config_value : request.ftrace_events()) {
+  auto&& append_event = [&](const std::string& config_value, bool stacktrace) {
     std::string group;
     std::string name;
     std::tie(group, name) = EventToStringGroupAndName(config_value);
@@ -143,13 +143,27 @@ std::set<GroupAndName> FtraceConfigMuxer::GetFtraceEvents(
             "Event doesn't exist: %s. Include the group in the config to allow "
             "the event to be output as a generic event.",
             name.c_str());
-        continue;
+        return;
       }
-      events.insert(GroupAndName(e->group, e->name));
+      events.insert(GroupAndName(e->group, e->name, stacktrace));
     } else {
-      events.insert(GroupAndName(group, name));
+      events.insert(GroupAndName(group, name, stacktrace));
     }
+  };
+
+  for (const auto& config_value : request.ftrace_events()) {
+    append_event(config_value, false);
   }
+  for (const auto& config_value : request.fstacktrace_events()) {
+    append_event(config_value, true);
+  }
+
+  // recording the kernel_stack event for stacktrace trigger
+  if (!request.fstacktrace_events().empty()) {
+    // TODO: turn on the symbolized ksyms?
+    InsertEvent("ftrace", "kernel_stack", &events);
+  }
+
   if (RequiresAtrace(request)) {
     InsertEvent("ftrace", "print", &events);
 
@@ -669,6 +683,7 @@ bool FtraceConfigMuxer::SetupConfig(FtraceConfigId id,
         errors->unknown_ftrace_events.push_back(group_and_name.ToString());
       continue;
     }
+
     // Niche option to skip events that are in the config, but don't have a
     // dedicated proto for the event in perfetto. Otherwise such events will be
     // encoded as GenericFtraceEvent.
@@ -686,6 +701,7 @@ bool FtraceConfigMuxer::SetupConfig(FtraceConfigId id,
     if (current_state_.ftrace_events.IsEventEnabled(event->ftrace_event_id) ||
         std::string("ftrace") == event->group) {
       filter.AddEnabledEvent(event->ftrace_event_id);
+      PERFETTO_DLOG("Enabled generic ftrace event %s", event->name);
       continue;
     }
     if (ftrace_->EnableEvent(event->group, event->name)) {
@@ -695,6 +711,14 @@ bool FtraceConfigMuxer::SetupConfig(FtraceConfigId id,
       PERFETTO_DPLOG("Failed to enable %s.", group_and_name.ToString().c_str());
       if (errors)
         errors->failed_ftrace_events.push_back(group_and_name.ToString());
+    }
+
+    // Enable the stacktrace trigger for some events, TODO: performance?
+    if (group_and_name.stacktrace() &&
+            !ftrace_->CreateEventTrigger(event->group, event->name,
+                                     "stacktrace")) {
+      // TODO: move to errors?
+      PERFETTO_DPLOG("Failed trigger: %s.", group_and_name.ToString().c_str());
     }
   }
 
@@ -754,6 +778,13 @@ bool FtraceConfigMuxer::SetupConfig(FtraceConfigId id,
     }
   }
 
+  bool symbolize_ksyms = request.symbolize_ksyms();
+  if (!request.fstacktrace_events().empty()) {
+    // forcibly enable the `symbolize_ksyms` to convert the stack frame to
+    // function in the trace_processor.
+    symbolize_ksyms = true;
+  }
+
   std::vector<std::string> apps(request.atrace_apps());
   std::vector<std::string> categories(request.atrace_categories());
   ds_configs_.emplace(
@@ -761,7 +792,7 @@ bool FtraceConfigMuxer::SetupConfig(FtraceConfigId id,
       std::forward_as_tuple(
           std::move(filter), std::move(syscall_filter), compact_sched,
           std::move(ftrace_print_filter), std::move(apps),
-          std::move(categories), request.symbolize_ksyms(),
+          std::move(categories), symbolize_ksyms,
           request.drain_buffer_percent(), GetSyscallsReturningFds(syscalls_)));
   return true;
 }
@@ -837,6 +868,8 @@ bool FtraceConfigMuxer::RemoveConfig(FtraceConfigId config_id) {
     PERFETTO_DCHECK(event);
     if (ftrace_->DisableEvent(event->group, event->name))
       current_state_.ftrace_events.DisableEvent(event->ftrace_event_id);
+    // Try to remove all triggers, ignore errors, TODO: filter to reduce calls
+    ftrace_->RemoveAllEventTriggers(event->group, event->name);
   }
 
   auto active_it = active_configs_.find(config_id);

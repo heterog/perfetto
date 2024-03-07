@@ -68,6 +68,11 @@ class FtraceParser {
                              uint32_t pid,
                              protozero::ConstBytes,
                              PacketSequenceStateGeneration*);
+  void ParseKernelStack(int64_t timestamp,
+                        uint32_t cpu,
+                        uint32_t tid,
+                        protozero::ConstBytes,
+                        PacketSequenceStateGeneration*);
   void ParseSchedSwitch(uint32_t cpu, int64_t timestamp, protozero::ConstBytes);
   void ParseSchedWaking(int64_t timestamp, uint32_t pid, protozero::ConstBytes);
   void ParseSchedProcessFree(int64_t timestamp, protozero::ConstBytes);
@@ -388,6 +393,7 @@ class FtraceParser {
   const StringId runtime_status_active_id_;
   const StringId runtime_status_suspending_id_;
   const StringId runtime_status_resuming_id_;
+  const StringId ftrace_kernel_stack_caller_id;
   std::vector<StringId> syscall_arg_name_ids_;
 
   struct FtraceMessageStrings {

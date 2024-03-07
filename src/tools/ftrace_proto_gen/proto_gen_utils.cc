@@ -228,6 +228,11 @@ ProtoType InferProtoType(const FtraceEvent::Field& field) {
                               /* is_repeated= */ true);
   }
 
+  // Dynamic size array for stacktrace
+  if (StartsWith(field.type_and_name, "unsigned long caller[8]")) {
+    return ProtoType::Numeric(64, false, true);
+  }
+
   // Ints of various sizes:
   if (field.size <= 4)
     return ProtoType::Numeric(32, field.is_signed);
