@@ -43,6 +43,9 @@ declare_args() {
   } else if (current_cpu == "arm64") {
     android_abi_target = "aarch64-linux-android"
     android_llvm_arch = "aarch64"
+  } else if (current_cpu == "riscv64") {
+    android_abi_target = "riscv64-linux-android"
+    android_llvm_arch = "riscv64"
   } else {
     assert(false, "Need android libgcc support for this arch.")
   }
@@ -55,6 +58,8 @@ declare_args() {
     android_app_abi = "x86_64"
   } else if (current_cpu == "arm64") {
     android_app_abi = "arm64-v8a"
+  } else if (current_cpu == "riscv64") {
+    android_app_abi = "riscv64"
   } else {
     assert(false, "Unknown ABI: " + current_cpu)
   }

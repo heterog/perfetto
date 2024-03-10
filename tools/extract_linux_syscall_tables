@@ -11,7 +11,7 @@ PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.realpath(__file__)))
 SELF_PATH = os.path.relpath(__file__, PROJECT_ROOT).replace('\\', '/')
 
 syscalls = {}
-archs = ['arm64', 'arm32', 'x86', 'x86_64']
+archs = ['arm64', 'arm32', 'x86', 'x86_64', 'riscv64']
 
 
 def print_tables():
@@ -98,8 +98,10 @@ def Main():
   # arch/arm64/include/asm/unistd.h
   #   -> arch/arm64/include/uapi/asm/unistd.h
   #     -> include/uapi/asm-generic/unistd.h
-  response = urlopen(KSRC + 'include/uapi/asm-generic/unistd.h')
-  syscalls['arm64'] = parse_def(response.read().decode())
+  # The `riscv64` is the same
+  response = urlopen(KSRC + 'include/uapi/asm-generic/unistd.h').read().decode()
+  syscalls['arm64'] = parse_def(response)
+  syscalls['riscv64'] = parse_def(response)
 
   dst_file = os.path.join(PROJECT_ROOT, 'src', 'kernel_utils',
                           'syscall_table_generated.h')

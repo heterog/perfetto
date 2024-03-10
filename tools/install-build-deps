@@ -430,7 +430,7 @@ GRPC_DEPS = [
 
 # Sysroots required to cross-compile Linux targets (linux-arm{,64}).
 # These are taken from Chromium's build/linux/sysroot_scripts/sysroots.json.
-BUILD_DEPS_LINUX_CROSS_SYSROOTS = [
+BUILD_DEPS_LINUX_CROSS_ARM_SYSROOTS = [
     Dependency(
         'buildtools/debian_sid_arm-sysroot.tgz',
         'https://commondatastorage.googleapis.com/chrome-linux-sysroot/toolchain/11d6f690ca49e8ba01a1d8c5346cedad2cf308fd/debian_sid_arm_sysroot.tar.xz',
@@ -443,9 +443,13 @@ BUILD_DEPS_LINUX_CROSS_SYSROOTS = [
         'linux', 'all'),
 ]
 
+BUILD_DEPS_LINUX_CROSS_RISCV64_SYSROOTS = [
+    # nothing here, placeholder for (maybe) further usage
+]
+
 ALL_DEPS = (
-    BUILD_DEPS_HOST + BUILD_DEPS_ANDROID + BUILD_DEPS_LINUX_CROSS_SYSROOTS +
-    TEST_DEPS_ANDROID + UI_DEPS)
+    BUILD_DEPS_HOST + BUILD_DEPS_ANDROID + BUILD_DEPS_LINUX_CROSS_ARM_SYSROOTS +
+    BUILD_DEPS_LINUX_CROSS_RISCV64_SYSROOTS + TEST_DEPS_ANDROID + UI_DEPS)
 
 ROOT_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 UI_DIR = os.path.join(ROOT_DIR, 'ui')
@@ -662,6 +666,10 @@ def Main():
       action='store_true',
       help='Debian sysroots for target_os="linux" target_cpu="arm|arm64"')
   parser.add_argument(
+      '--linux-riscv64',
+      action='store_true',
+      help='Debian sysroots for target_os="linux" target_cpu="riscv64"')
+  parser.add_argument(
       '--ui',
       action='store_true',
       help='Node and NPM packages to Build the Web-based UI via ./ui/build')
@@ -701,7 +709,11 @@ def Main():
   if args.android:
     deps += BUILD_DEPS_ANDROID + TEST_DEPS_ANDROID
   if args.linux_arm:
-    deps += BUILD_DEPS_LINUX_CROSS_SYSROOTS
+    deps += BUILD_DEPS_LINUX_CROSS_ARM_SYSROOTS
+  if args.linux_riscv64:
+    # build the sysroot directly
+    subprocess.check_call(["python3", f"{ROOT_DIR}/third_party/chromium/sysroot_creator.py", "build", "riscv64"])
+    deps += BUILD_DEPS_LINUX_CROSS_RISCV64_SYSROOTS
   if args.ui:
     deps += UI_DEPS
   if args.grpc:

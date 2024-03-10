@@ -2,3 +2,4 @@ clang-format/
 gn/
 ninja/
 pnpm/
+chromium/generated_package_lists/

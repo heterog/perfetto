@@ -15,6 +15,7 @@ d8/
 debian_sid_arm-sysroot/
 debian_sid_arm64-sysroot/
 debian_sid_armel-sysroot/
+debian_sid_riscv64-sysroot/
 emulator/
 googletest/
 grpc/src

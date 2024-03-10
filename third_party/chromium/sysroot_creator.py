@@ -23,33 +23,16 @@ import requests
 import reversion_glibc
 
 DISTRO = "debian"
-RELEASE = "bullseye"
-
-# This number is appended to the sysroot key to cause full rebuilds.  It
-# should be incremented when removing packages or patching existing packages.
-# It should not be incremented when adding packages.
-SYSROOT_RELEASE = 2
+RELEASE = "sid"
 
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 
-CHROME_DIR = os.path.abspath(os.path.join(SCRIPT_DIR, "..", "..", ".."))
-BUILD_DIR = os.path.join(CHROME_DIR, "out", "sysroot-build", RELEASE)
+CHROME_DIR = os.path.abspath(os.path.join(SCRIPT_DIR, "..", ".."))
+BUILD_DIR = os.path.join(CHROME_DIR, "buildtools", "debian_sid_riscv64-sysroot")
 
-# gpg keyring file generated using generate_keyring.sh
-KEYRING_FILE = os.path.join(SCRIPT_DIR, "keyring.gpg")
-
-ARCHIVE_TIMESTAMP = "20230611T210420Z"
-
-ARCHIVE_URL = f"https://snapshot.debian.org/archive/debian/{ARCHIVE_TIMESTAMP}/"
+ARCHIVE_URL = "https://mirrors.ustc.edu.cn/debian/"
 APT_SOURCES_LIST = [
-    # Debian 12 (Bookworm) is needed for GTK4.  It should be kept before
-    # bullseye so that bullseye takes precedence.
-    ("bookworm", ["main"]),
-    ("bookworm-updates", ["main"]),
-    # This mimics a sources.list from bullseye.
-    ("bullseye", ["main", "contrib", "non-free"]),
-    ("bullseye-updates", ["main", "contrib", "non-free"]),
-    ("bullseye-backports", ["main", "contrib", "non-free"]),
+    ("sid", ["main", "contrib", "non-free"]),
 ]
 
 TRIPLES = {
@@ -60,6 +43,7 @@ TRIPLES = {
     "armel": "arm-linux-gnueabi",
     "mipsel": "mipsel-linux-gnu",
     "mips64el": "mips64el-linux-gnuabi64",
+    "riscv64": "riscv64-linux-gnu",
 }
 
 REQUIRED_TOOLS = [
@@ -78,407 +62,12 @@ RELEASE_FILE_GPG = "Release.gpg"
 
 # Packages common to all architectures.
 DEBIAN_PACKAGES = [
-    "comerr-dev",
-    "krb5-multidev",
-    "libasound2",
-    "libasound2-dev",
-    "libasyncns0",
-    "libatk-bridge2.0-0",
-    "libatk-bridge2.0-dev",
-    "libatk1.0-0",
-    "libatk1.0-dev",
-    "libatomic1",
-    "libatspi2.0-0",
-    "libatspi2.0-dev",
-    "libattr1",
-    "libaudit1",
-    "libavahi-client3",
-    "libavahi-common3",
-    "libb2-1",
-    "libblkid-dev",
-    "libblkid1",
-    "libbluetooth-dev",
-    "libbluetooth3",
-    "libbrotli-dev",
-    "libbrotli1",
-    "libbsd0",
     "libc6",
     "libc6-dev",
-    "libcairo-gobject2",
-    "libcairo-script-interpreter2",
-    "libcairo2",
-    "libcairo2-dev",
-    "libcap-dev",
-    "libcap-ng0",
-    "libcap2",
-    "libcloudproviders0",
-    "libcolord2",
-    "libcom-err2",
-    "libcrypt-dev",
     "libcrypt1",
-    "libcups2",
-    "libcups2-dev",
-    "libcupsimage2",
-    "libcupsimage2-dev",
-    "libcurl3-gnutls",
-    "libcurl4-gnutls-dev",
-    "libdatrie-dev",
-    "libdatrie1",
-    "libdb5.3",
-    "libdbus-1-3",
-    "libdbus-1-dev",
-    "libdbus-glib-1-2",
-    "libdbusmenu-glib-dev",
-    "libdbusmenu-glib4",
-    "libdbusmenu-gtk3-4",
-    "libdbusmenu-gtk4",
-    "libdeflate-dev",
-    "libdeflate0",
-    "libdouble-conversion3",
-    "libdrm-amdgpu1",
-    "libdrm-dev",
-    "libdrm-nouveau2",
-    "libdrm-radeon1",
-    "libdrm2",
-    "libegl-dev",
-    "libegl1",
-    "libegl1-mesa",
-    "libegl1-mesa-dev",
-    "libelf-dev",
-    "libelf1",
-    "libepoxy-dev",
-    "libepoxy0",
-    "libevdev-dev",
-    "libevdev2",
-    "libevent-2.1-7",
-    "libexpat1",
-    "libexpat1-dev",
-    "libffi-dev",
-    "libffi7",
-    "libflac-dev",
-    "libflac8",
-    "libfontconfig-dev",
-    "libfontconfig1",
-    "libfreetype-dev",
-    "libfreetype6",
-    "libfribidi-dev",
-    "libfribidi0",
-    "libgbm-dev",
-    "libgbm1",
-    "libgcc-10-dev",
-    "libgcc-s1",
-    "libgcrypt20",
-    "libgcrypt20-dev",
-    "libgdk-pixbuf-2.0-0",
-    "libgdk-pixbuf-2.0-dev",
-    "libgl-dev",
-    "libgl1",
-    "libgl1-mesa-dev",
-    "libgl1-mesa-glx",
-    "libglapi-mesa",
-    "libgles-dev",
-    "libgles1",
-    "libgles2",
-    "libglib2.0-0",
-    "libglib2.0-dev",
-    "libglvnd-dev",
-    "libglvnd0",
-    "libglx-dev",
-    "libglx0",
-    "libgmp10",
-    "libgnutls-dane0",
-    "libgnutls-openssl27",
-    "libgnutls28-dev",
-    "libgnutls30",
-    "libgnutlsxx28",
-    "libgomp1",
-    "libgpg-error-dev",
-    "libgpg-error0",
-    "libgraphene-1.0-0",
-    "libgraphene-1.0-dev",
-    "libgraphite2-3",
-    "libgraphite2-dev",
-    "libgssapi-krb5-2",
-    "libgssrpc4",
-    "libgtk-3-0",
-    "libgtk-3-dev",
-    "libgtk-4-1",
-    "libgtk-4-dev",
-    "libgtk2.0-0",
-    "libgudev-1.0-0",
-    "libharfbuzz-dev",
-    "libharfbuzz-gobject0",
-    "libharfbuzz-icu0",
-    "libharfbuzz0b",
-    "libhogweed6",
-    "libice6",
-    "libicu-le-hb0",
-    "libicu67",
-    "libidl-2-0",
-    "libidn11",
-    "libidn2-0",
-    "libinput-dev",
-    "libinput10",
-    "libjbig-dev",
-    "libjbig0",
-    "libjpeg62-turbo",
-    "libjpeg62-turbo-dev",
-    "libjson-glib-1.0-0",
-    "libjsoncpp-dev",
-    "libjsoncpp24",
-    "libk5crypto3",
-    "libkadm5clnt-mit12",
-    "libkadm5srv-mit12",
-    "libkdb5-10",
-    "libkeyutils1",
-    "libkrb5-3",
-    "libkrb5-dev",
-    "libkrb5support0",
-    "liblcms2-2",
-    "libldap-2.4-2",
-    "liblerc4",
-    "libltdl7",
-    "liblz4-1",
-    "liblzma5",
-    "liblzo2-2",
-    "libmd0",
-    "libmd4c0",
-    "libminizip-dev",
-    "libminizip1",
-    "libmount-dev",
-    "libmount1",
-    "libmtdev1",
-    "libncurses-dev",
-    "libncurses6",
-    "libncursesw6",
-    "libnettle8",
-    "libnghttp2-14",
-    "libnsl2",
-    "libnspr4",
-    "libnspr4-dev",
-    "libnss-db",
-    "libnss3",
-    "libnss3-dev",
-    "libogg-dev",
-    "libogg0",
-    "libopengl0",
-    "libopus-dev",
-    "libopus0",
-    "libp11-kit0",
-    "libpam0g",
-    "libpam0g-dev",
-    "libpango-1.0-0",
-    "libpango1.0-dev",
-    "libpangocairo-1.0-0",
-    "libpangoft2-1.0-0",
-    "libpangox-1.0-0",
-    "libpangoxft-1.0-0",
-    "libpci-dev",
-    "libpci3",
-    "libpciaccess0",
-    "libpcre16-3",
-    "libpcre2-16-0",
-    "libpcre2-32-0",
-    "libpcre2-8-0",
-    "libpcre2-dev",
-    "libpcre2-posix2",
-    "libpcre3",
-    "libpcre3-dev",
-    "libpcre32-3",
-    "libpcrecpp0v5",
-    "libpipewire-0.3-0",
-    "libpipewire-0.3-dev",
-    "libpixman-1-0",
-    "libpixman-1-dev",
-    "libpng-dev",
-    "libpng16-16",
-    "libproxy1v5",
-    "libpsl5",
-    "libpthread-stubs0-dev",
-    "libpulse-dev",
-    "libpulse-mainloop-glib0",
-    "libpulse0",
-    "libqt5concurrent5",
-    "libqt5core5a",
-    "libqt5dbus5",
-    "libqt5gui5",
-    "libqt5network5",
-    "libqt5printsupport5",
-    "libqt5sql5",
-    "libqt5test5",
-    "libqt5widgets5",
-    "libqt5xml5",
-    "libqt6concurrent6",
-    "libqt6core6",
-    "libqt6dbus6",
-    "libqt6gui6",
-    "libqt6network6",
-    "libqt6opengl6",
-    "libqt6openglwidgets6",
-    "libqt6printsupport6",
-    "libqt6sql6",
-    "libqt6test6",
-    "libqt6widgets6",
-    "libqt6xml6",
-    "libre2-9",
-    "libre2-dev",
-    "librest-0.7-0",
-    "librtmp1",
-    "libsasl2-2",
-    "libselinux1",
-    "libselinux1-dev",
-    "libsepol1",
-    "libsepol1-dev",
-    "libsm6",
-    "libsnappy-dev",
-    "libsnappy1v5",
-    "libsndfile1",
-    "libsoup-gnome2.4-1",
-    "libsoup2.4-1",
-    "libspa-0.2-dev",
-    "libspeechd-dev",
-    "libspeechd2",
-    "libsqlite3-0",
-    "libssh2-1",
-    "libssl-dev",
-    "libssl1.1",
-    "libstdc++-10-dev",
-    "libstdc++6",
-    "libsystemd-dev",
-    "libsystemd0",
-    "libtasn1-6",
-    "libthai-dev",
-    "libthai0",
-    "libtiff-dev",
-    "libtiff5",
-    "libtiff6",
-    "libtiffxx5",
-    "libtinfo6",
-    "libtirpc3",
-    "libts0",
-    "libudev-dev",
-    "libudev1",
-    "libunbound8",
-    "libunistring2",
-    "libutempter-dev",
-    "libutempter0",
-    "libuuid1",
-    "libva-dev",
-    "libva-drm2",
-    "libva-glx2",
-    "libva-wayland2",
-    "libva-x11-2",
-    "libva2",
-    "libvorbis0a",
-    "libvorbisenc2",
-    "libvulkan-dev",
-    "libvulkan1",
-    "libwacom2",
-    "libwayland-bin",
-    "libwayland-client0",
-    "libwayland-cursor0",
-    "libwayland-dev",
-    "libwayland-egl-backend-dev",
-    "libwayland-egl1",
-    "libwayland-egl1-mesa",
-    "libwayland-server0",
-    "libwebp-dev",
-    "libwebp6",
-    "libwebp7",
-    "libwebpdemux2",
-    "libwebpmux3",
-    "libwrap0",
-    "libx11-6",
-    "libx11-dev",
-    "libx11-xcb-dev",
-    "libx11-xcb1",
-    "libxau-dev",
-    "libxau6",
-    "libxcb-dri2-0",
-    "libxcb-dri2-0-dev",
-    "libxcb-dri3-0",
-    "libxcb-dri3-dev",
-    "libxcb-glx0",
-    "libxcb-glx0-dev",
-    "libxcb-icccm4",
-    "libxcb-image0",
-    "libxcb-image0-dev",
-    "libxcb-keysyms1",
-    "libxcb-present-dev",
-    "libxcb-present0",
-    "libxcb-randr0",
-    "libxcb-randr0-dev",
-    "libxcb-render-util0",
-    "libxcb-render-util0-dev",
-    "libxcb-render0",
-    "libxcb-render0-dev",
-    "libxcb-shape0",
-    "libxcb-shape0-dev",
-    "libxcb-shm0",
-    "libxcb-shm0-dev",
-    "libxcb-sync-dev",
-    "libxcb-sync1",
-    "libxcb-util-dev",
-    "libxcb-util1",
-    "libxcb-xfixes0",
-    "libxcb-xfixes0-dev",
-    "libxcb-xinerama0",
-    "libxcb-xinput0",
-    "libxcb-xkb1",
-    "libxcb1",
-    "libxcb1-dev",
-    "libxcomposite-dev",
-    "libxcomposite1",
-    "libxcursor-dev",
-    "libxcursor1",
-    "libxdamage-dev",
-    "libxdamage1",
-    "libxdmcp-dev",
-    "libxdmcp6",
-    "libxext-dev",
-    "libxext6",
-    "libxfixes-dev",
-    "libxfixes3",
-    "libxft-dev",
-    "libxft2",
-    "libxi-dev",
-    "libxi6",
-    "libxinerama-dev",
-    "libxinerama1",
-    "libxkbcommon-dev",
-    "libxkbcommon-x11-0",
-    "libxkbcommon0",
-    "libxml2",
-    "libxml2-dev",
-    "libxrandr-dev",
-    "libxrandr2",
-    "libxrender-dev",
-    "libxrender1",
-    "libxshmfence-dev",
-    "libxshmfence1",
-    "libxslt1-dev",
-    "libxslt1.1",
-    "libxss-dev",
-    "libxss1",
-    "libxt-dev",
-    "libxt6",
-    "libxtst-dev",
-    "libxtst6",
-    "libxxf86vm-dev",
-    "libxxf86vm1",
-    "libzstd1",
     "linux-libc-dev",
-    "mesa-common-dev",
-    "qt6-base-dev",
-    "qt6-base-dev-tools",
-    "qtbase5-dev",
-    "qtbase5-dev-tools",
-    "shared-mime-info",
-    "uuid-dev",
-    "wayland-protocols",
-    "x11proto-dev",
-    "zlib1g",
-    "zlib1g-dev",
+    "libgcc-13-dev",
+    "libgcc-s1",
 ]
 
 DEBIAN_PACKAGES_ARCH = {
@@ -535,6 +124,7 @@ DEBIAN_PACKAGES_ARCH = {
     "mips64el": [
         "valgrind",
     ],
+    "riscv64": [],
 }
 
 
@@ -708,6 +298,7 @@ def generate_package_list(arch: str) -> dict[str, str]:
     # Write the URLs and checksums of the requested packages to the output file
     output_file = os.path.join(SCRIPT_DIR, "generated_package_lists",
                                f"{RELEASE}.{arch}")
+    os.makedirs(os.path.dirname(output_file), exist_ok=True)
     with open(output_file, "w") as f:
         f.write("\n".join(sorted(package_dict)) + "\n")
     return package_dict
@@ -715,39 +306,6 @@ def generate_package_list(arch: str) -> dict[str, str]:
 
 def hacks_and_patches(install_root: str, script_dir: str, arch: str) -> None:
     banner("Misc Hacks & Patches")
-
-    # Remove an unnecessary dependency on qtchooser.
-    qtchooser_conf = os.path.join(install_root, "usr", "lib", TRIPLES[arch],
-                                  "qt-default/qtchooser/default.conf")
-    if os.path.exists(qtchooser_conf):
-        os.remove(qtchooser_conf)
-
-    # libxcomposite1 is missing a symbols file.
-    atomic_copyfile(
-        os.path.join(script_dir, "libxcomposite1-symbols"),
-        os.path.join(install_root, "debian", "libxcomposite1", "DEBIAN",
-                     "symbols"),
-    )
-
-    # __GLIBC_MINOR__ is used as a feature test macro. Replace it with the
-    # earliest supported version of glibc (2.26).
-    features_h = os.path.join(install_root, "usr", "include", "features.h")
-    replace_in_file(features_h, r"(#define\s+__GLIBC_MINOR__)", r"\1 26 //")
-
-    # fcntl64() was introduced in glibc 2.28. Make sure to use fcntl() instead.
-    fcntl_h = os.path.join(install_root, "usr", "include", "fcntl.h")
-    replace_in_file(
-        fcntl_h,
-        r"#ifndef __USE_FILE_OFFSET64(\nextern int fcntl)",
-        r"#if 1\1",
-    )
-
-    # Do not use pthread_cond_clockwait as it was introduced in glibc 2.30.
-    cppconfig_h = os.path.join(install_root, "usr", "include", TRIPLES[arch],
-                               "c++", "10", "bits", "c++config.h")
-    replace_in_file(cppconfig_h,
-                    r"(#define\s+_GLIBCXX_USE_PTHREAD_COND_CLOCKWAIT)",
-                    r"// \1")
 
     # Include limits.h in stdlib.h to fix an ODR issue.
     stdlib_h = os.path.join(install_root, "usr", "include", "stdlib.h")
@@ -763,18 +321,6 @@ def hacks_and_patches(install_root: str, script_dir: str, arch: str) -> None:
         for file in os.listdir(triple_pkgconfig_dir):
             shutil.move(os.path.join(triple_pkgconfig_dir, file),
                         pkgconfig_dir)
-
-    # Avoid requiring unsupported glibc versions.
-    for lib in ["libc.so.6", "libm.so.6", "libcrypt.so.1"]:
-        lib_path = os.path.join(install_root, "lib", TRIPLES[arch], lib)
-        reversion_glibc.reversion_glibc(lib_path)
-
-    # GTK4 is provided by bookworm (12), but pango is provided by bullseye
-    # (11).  Fix the GTK4 pkgconfig file to relax the pango version
-    # requirement.
-    gtk4_pc = os.path.join(pkgconfig_dir, 'gtk4.pc')
-    replace_in_file(gtk4_pc, r"pango [>=0-9. ]*", "pango")
-    replace_in_file(gtk4_pc, r"pangocairo [>=0-9. ]*", "pangocairo")
 
 
 def replace_in_file(file_path: str, search_pattern: str,
@@ -924,7 +470,6 @@ def build_sysroot(arch: str) -> None:
     hacks_and_patches(install_root, SCRIPT_DIR, arch)
     cleanup_jail_symlinks(install_root)
     verify_library_deps(install_root)
-    create_tarball(install_root, arch)
 
 
 def upload_sysroot(arch: str) -> None:
@@ -947,22 +492,12 @@ def verify_package_listing(file_path: str, output_file: str,
     # Paths for Release and Release.gpg files
     repo_basedir = f"{ARCHIVE_URL}/dists/{dist}"
     release_list = f"{repo_basedir}/{RELEASE_FILE}"
-    release_list_gpg = f"{repo_basedir}/{RELEASE_FILE_GPG}"
-
     release_file = os.path.join(BUILD_DIR, f"{dist}-{RELEASE_FILE}")
-    release_file_gpg = os.path.join(BUILD_DIR, f"{dist}-{RELEASE_FILE_GPG}")
 
-    if not os.path.exists(KEYRING_FILE):
-        raise Exception(f"KEYRING_FILE not found: {KEYRING_FILE}")
-
-    # Download Release and Release.gpg files
+    # Download Release
     download_or_copy_non_unique_filename(release_list, release_file)
-    download_or_copy_non_unique_filename(release_list_gpg, release_file_gpg)
 
-    # Verify Release file with GPG
-    subprocess.run(
-        ["gpgv", "--keyring", KEYRING_FILE, release_file_gpg, release_file],
-        check=True)
+    # TODO: Check keyring for Debian Sid
 
     # Find the SHA256 checksum for the specific file in the Release file
     sha256sum_pattern = re.compile(r"([a-f0-9]{64})\s+\d+\s+" +
