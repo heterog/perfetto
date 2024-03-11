@@ -37,30 +37,6 @@ class FtraceModule : public ProtoImporterModule {
   virtual void ParseInlineSchedWaking(uint32_t cpu,
                                       int64_t ts,
                                       const InlineSchedWaking& data);
-
-  // TODO: "uint32_t id" -> "RawId id"
-  void SetLastFtraceEventId(uint32_t cpu, uint32_t id) {
-    last_ftrace_event_ids_.resize(cpu + 1, static_cast<uint32_t>(-1));
-    last_ftrace_event_ids_[cpu] = id;
-  }
-
-  std::optional<uint32_t> GetLastFtraceEventId(uint32_t cpu) {
-    if (cpu >= last_ftrace_event_ids_.size()) {
-      return std::nullopt;
-    }
-
-    const uint32_t id = last_ftrace_event_ids_[cpu];
-    if (id == static_cast<uint32_t>(-1)) {
-      return std::nullopt;
-    }
-    return id;
-  }
-
- private:
-  // TODO: Not a good example for abstracting, but have no other idea where
-  // to place the ftrace related internal fields? Maybe the `context_->storage`?
-  // TODO: Use `base::SmallVector` for (maybe) better performance?
-  std::vector<uint32_t> last_ftrace_event_ids_;
 };
 
 }  // namespace trace_processor

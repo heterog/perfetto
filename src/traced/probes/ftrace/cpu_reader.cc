@@ -988,8 +988,9 @@ bool CpuReader::ParseKernelStack(const perfetto::Event& info,
     return false;
   }
 
-  // `message` here is a nested protobuf, shall match the `ftrace.proto` def
-  for (int64_t i = 0; i < size; ++i) {
+  // `message` here is a nested protobuf, shall match the `ftrace.proto` def.
+  // Reverse the stack as well, to match the perf format.
+  for (int64_t i = size - 1; i >= 0; --i) {
     ReadSymbolAddr<uint64_t>(
         caller_field_start + i * caller_field_size,
         caller_field.proto_field_id,

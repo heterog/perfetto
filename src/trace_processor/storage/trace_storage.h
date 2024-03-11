@@ -917,6 +917,26 @@ class TraceStorage {
     return static_cast<Variadic::Type>(idx);
   }
 
+  // TODO: "uint32_t id" -> "RawId id"
+  void SetLastFtraceEventId(uint32_t cpu, uint32_t id) {
+    if (cpu >= last_ftrace_event_ids_.size()) {
+      last_ftrace_event_ids_.resize(cpu + 1, static_cast<uint32_t>(-1));
+    }
+    last_ftrace_event_ids_[cpu] = id;
+  }
+
+  std::optional<uint32_t> GetLastFtraceEventId(uint32_t cpu) {
+    if (cpu >= last_ftrace_event_ids_.size()) {
+      return std::nullopt;
+    }
+
+    const uint32_t id = last_ftrace_event_ids_[cpu];
+    if (id == static_cast<uint32_t>(-1)) {
+      return std::nullopt;
+    }
+    return id;
+  }
+
  private:
   using StringHash = uint64_t;
 
@@ -1090,6 +1110,11 @@ class TraceStorage {
   // The below array allow us to map between enums and their string
   // representations.
   std::array<StringId, Variadic::kMaxType + 1> variadic_type_ids_;
+
+  // TODO: Not a good example for abstracting, but have no other idea where
+  // to place the ftrace related internal fields?
+  // TODO: Use `base::SmallVector` for (maybe) better performance?
+  std::vector<uint32_t> last_ftrace_event_ids_;
 };
 
 }  // namespace trace_processor

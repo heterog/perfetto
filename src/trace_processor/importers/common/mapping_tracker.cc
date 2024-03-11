@@ -32,7 +32,7 @@ namespace trace_processor {
 namespace {
 
 bool IsKernelModule(base::StringView name) {
-  return !name.StartsWith("[kernel.kallsyms]");
+  return !name.StartsWith("[kernel.kallsyms]") && name != "/kernel";
 }
 
 }  // namespace
@@ -77,6 +77,25 @@ KernelMemoryMapping& MappingTracker::CreateKernelMemoryMapping(
   }
 
   return AddMapping(std::move(mapping));
+}
+
+KernelMemoryMapping& MappingTracker::GetOrCreateKernelMemoryMappingDefault() {
+  if (kernel_) {
+    return *kernel_;
+  }
+
+  // params from perf sampling, except from .name (perf using '/kernel'); seems
+  // like the `CreateKernelMemoryMapping` is unused in traced_perf?
+  // TODO: maybe this function is abundant?
+  CreateMappingParams params = {
+      AddressRange(0, 0),
+      0,
+      0,
+      static_cast<uint64_t>(-1),
+      "/kernel",
+      std::nullopt,  // TODO: fill up using /sys/kernel/notes
+  };
+  return CreateKernelMemoryMapping(params);
 }
 
 UserMemoryMapping& MappingTracker::CreateUserMemoryMapping(

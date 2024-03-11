@@ -28,12 +28,15 @@
 #include "src/trace_processor/importers/common/process_tracker.h"
 #include "src/trace_processor/importers/common/thread_state_tracker.h"
 #include "src/trace_processor/importers/common/track_tracker.h"
+#include "src/trace_processor/importers/common/mapping_tracker.h"
+#include "src/trace_processor/importers/common/stack_profile_tracker.h"
 #include "src/trace_processor/importers/ftrace/ftrace_module.h"
 #include "src/trace_processor/importers/ftrace/binder_tracker.h"
 #include "src/trace_processor/importers/ftrace/v4l2_tracker.h"
 #include "src/trace_processor/importers/ftrace/virtio_video_tracker.h"
 #include "src/trace_processor/importers/i2c/i2c_tracker.h"
 #include "src/trace_processor/importers/proto/packet_sequence_state_generation.h"
+#include "src/trace_processor/importers/proto/stack_profile_sequence_state.h"
 #include "src/trace_processor/importers/syscalls/syscall_tracker.h"
 #include "src/trace_processor/importers/systrace/systrace_parser.h"
 #include "src/trace_processor/storage/stats.h"
@@ -343,7 +346,6 @@ FtraceParser::FtraceParser(TraceProcessorContext* context)
       runtime_status_suspending_id_(
           context->storage->InternString("Suspending")),
       runtime_status_resuming_id_(context->storage->InternString("Resuming")) {
-      ftrace_kernel_stack_caller_id(context_->storage->InternString("caller")) {
   // Build the lookup table for the strings inside ftrace events (e.g. the
   // name of ftrace event fields and the names of their args).
   for (size_t i = 0; i < GetDescriptorsSize(); i++) {
@@ -1213,7 +1215,7 @@ void FtraceParser::ParseGenericFtrace(int64_t ts,
   RawId id = context_->storage->mutable_ftrace_event_table()
                  ->Insert({ts, event_id, cpu, utid})
                  .id;
-  context_->ftrace_module->SetLastFtraceEventId(cpu, id.value);
+  context_->storage->SetLastFtraceEventId(cpu, id.value);
   auto inserter = context_->args_tracker->AddArgsTo(id);
 
   for (auto it = evt.field(); it; ++it) {
@@ -1256,7 +1258,7 @@ void FtraceParser::ParseTypedFtraceToRaw(
       context_->storage->mutable_ftrace_event_table()
           ->Insert({timestamp, message_strings.message_name_id, cpu, utid})
           .id;
-  context_->ftrace_module->SetLastFtraceEventId(cpu, id.value);
+  context_->storage->SetLastFtraceEventId(cpu, id.value);
   auto inserter = context_->args_tracker->AddArgsTo(id);
 
   for (auto fld = decoder.ReadField(); fld.valid(); fld = decoder.ReadField()) {
@@ -1351,14 +1353,9 @@ void FtraceParser::ParseKernelStack(int64_t timestamp,
                                     uint32_t tid,
                                     protozero::ConstBytes blob,
                                     PacketSequenceStateGeneration* seq_state) {
-#if 0
-  // FIXME: incomplete... want to merge with existing events, but too much
-  // hard-coded field in `to_ftrace.cc`.
-  // And the inserter here will overwrite the existed arguments, lost data.
-
-  const auto opt_id = context_->ftrace_module->GetLastFtraceEventId(cpu);
+  const auto opt_id = context_->storage->GetLastFtraceEventId(cpu);
   if (!opt_id.has_value()) {
-    // TODO: Still has lots of the missing events :/ wondering why
+    // TODO: Still has few of the missing events :/ sometimes eq to the num CPUs
     PERFETTO_DLOG("Last event missing? cpu %u tid %u", cpu, tid);
     return;
   }
@@ -1377,50 +1374,58 @@ void FtraceParser::ParseKernelStack(int64_t timestamp,
     (void) timestamp; /* TODO: compare the timestamp, should be in a range */
     return;
   }
-#endif
 
-  // found it, add the stack info to the args; TODO: other structure?
+  // Generate the stack profiling sample (to re-use the code), TODO: new event?
+  // For the reason not choosing the `cpu_reader.cc` as inserter, we want the
+  // ftrace event reader as quick as possible.
   protos::pbzero::KernelStackFtraceEvent::Decoder evt(blob.data, blob.size);
-  std::string symbolized_stack;
+  auto& kernel_mapping =
+      context_->mapping_tracker->GetOrCreateKernelMemoryMappingDefault();
+  std::optional<CallsiteId> parent_callsite_id;
+  uint32_t depth = 0;
+
+  // @see FindOrInsertCallstack; TODO: context_->storage->IncrementStats?
   for (auto fp = evt.caller(); fp; ++fp) {
     const auto idx = fp->as_uint32();
     auto* sym = seq_state->LookupInternedMessage<
         protos::pbzero::InternedData::kKernelSymbolsFieldNumber,
         protos::pbzero::InternedString>(idx);
-
-    if (sym) {
-      // TODO: performance optimize...
-      symbolized_stack.append(sym->str().ToStdStringView());
-      symbolized_stack.push_back('\n');
-    }
-    else {
+    if (!sym) {
       PERFETTO_DLOG("Cannot find symbol of index %u", idx);
+      continue;
     }
+
+    // There's no cache here (the `FindOrInsertFrame` does have), so might be a
+    // little bit slower?
+    // The std::string has SSO, and symbols is likely to be small (in size).
+    // The base::StringView is... A string view... So notice the lifetime!
+    // TODO: full valgrind/asan check is needed :/
+    std::string sym_name = sym->str().ToStdString();
+    auto frame_id =
+        kernel_mapping.InternFrame(0, base::StringView(sym_name));
+    parent_callsite_id = context_->stack_profile_tracker->InternCallsite(
+        parent_callsite_id, frame_id, depth);
+    ++depth;
   }
 
-  if (!symbolized_stack.empty()) {
-#if 0
-    StringId str_id = context_->storage->InternString(
-        base::StringView(symbolized_stack));
-    auto inserter = context_->args_tracker->AddArgsTo(id);
-    inserter.AddArg(ftrace_stacktrace_id_, Variadic::String(str_id));
+  if (!parent_callsite_id) {
+    PERFETTO_DLOG("Empty callstack found");
+    return;
   }
-#else
-    using protos::pbzero::FtraceEvent;
-    StringId msg_id =
-        ftrace_message_strings_[FtraceEvent::kKernelStackFieldNumber]
-        .message_name_id;
-    UniqueTid utid = context_->process_tracker->GetOrCreateThread(tid);
-    RawId id = context_->storage->mutable_ftrace_event_table()
-                   ->Insert({timestamp, msg_id, cpu, utid})
-                   .id;
-    StringId str_id = context_->storage->InternString(
-        base::StringView(symbolized_stack));
 
-    auto inserter = context_->args_tracker->AddArgsTo(id);
-    inserter.AddArg(ftrace_kernel_stack_caller_id, Variadic::String(str_id));
-#endif
-  }
+  // Found the event, and stack is ready! @see: ParsePerfSample
+  context_->storage->mutable_perf_sample_table()->Insert({
+      // using the actual event's timestamp, instead of the kernel_stack
+      row->ts(), utid.value(), cpu,
+      context_->storage->InternString("kernel"),
+      // TODO: in_perf_session_id?
+      parent_callsite_id, std::nullopt, 0
+  });
+
+  // TODO: generate the original kernel_stack event?
+  // TODO: when fstacktrace and callstack_sampling enabled at the same time,
+  // seems the stack will get corrupted?
+  (void) timestamp;
 }
 
 PERFETTO_ALWAYS_INLINE

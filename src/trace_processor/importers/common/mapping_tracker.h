@@ -87,6 +87,10 @@ class MappingTracker {
   // duration of this instance.
   KernelMemoryMapping& CreateKernelMemoryMapping(CreateMappingParams params);
 
+  // Create the kernel memory mapping, using default values.
+  // @see BuildCreateMappingParams
+  KernelMemoryMapping& GetOrCreateKernelMemoryMappingDefault();
+
   // Create a new user space mapping. Returned reference will be valid for the
   // duration of this instance.
   UserMemoryMapping& CreateUserMemoryMapping(UniquePid upid,
