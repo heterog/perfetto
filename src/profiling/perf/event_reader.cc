@@ -367,6 +367,14 @@ ParsedSample EventReader::ParseSampleRecord(uint32_t cpu,
     }
   }
 
+#if PERFETTO_DCHECK_IS_ON()
+  const char* expected_end = record_start + sample_size;
+  if (parse_pos < expected_end) {
+    PERFETTO_DLOG("Parse incomplete, still remains %lu bytes unparsed.",
+                  expected_end - parse_pos);
+    return sample;
+  }
+#endif
   PERFETTO_CHECK(parse_pos == record_start + sample_size);
   return sample;
 }

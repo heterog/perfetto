@@ -159,7 +159,6 @@ void Unwinder::PostProcessQueue() {
 void Unwinder::ProcessQueue() {
   PERFETTO_DCHECK_THREAD(thread_checker_);
   PERFETTO_METATRACE_SCOPED(TAG_PRODUCER, PROFILER_UNWIND_TICK);
-  PERFETTO_DLOG("Unwinder::ProcessQueue");
 
   base::FlatSet<DataSourceInstanceID> pending_sample_sources =
       ConsumeAndUnwindReadySamples();
