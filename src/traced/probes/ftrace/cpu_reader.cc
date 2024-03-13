@@ -860,6 +860,7 @@ bool CpuReader::ParseField(const Field& field,
       return true;
     case kFtraceStacktraceToSpecial:
       // Handled in `ParseKernelStack`, thus nop here, satisfy the compiler
+      __builtin_unreachable();
     case kInvalidTranslationStrategy:
       break;
   }

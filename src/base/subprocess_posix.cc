@@ -247,6 +247,31 @@ void Subprocess::Start() {
     PERFETTO_FATAL("not reached");
   }
 
+#if PERFETTO_DCHECK_IS_ON()
+  // Place it here as we don't want the gdbserver as the children, may cause
+  // other problems hmm.
+  // TODO: move to Subprocess::Subprocess, modify the args.exec_cmd in place.
+  const char* gdb_target = getenv("TRACEBOX_GDB_TARGET");
+  if (gdb_target && args.exec_cmd[1] == gdb_target) {
+    char parent[16];
+    snprintf(parent, sizeof(parent), "%d", s_->pid);
+
+    if (fork() == 0) {
+      setsid();
+      PERFETTO_DLOG("Going to attach debugee, me %d, target %s",
+                    getpid(), parent);
+      execl("/usr/bin/lldb-server", "lldb-server", "g", ":1234",
+            "--attach", parent, nullptr);
+      __builtin_unreachable();
+    }
+
+    // TODO: wait the gdbserver? In theory, when gdbserver attached to this
+    // process, and this process is going to stop. Waiting a gdbserver can only
+    // have benefits to debug the very-early stages, currently I'm not in
+    // interested :/
+  }
+#endif
+
   s_->status = kRunning;
 
   // Close the child-end of the pipes.
